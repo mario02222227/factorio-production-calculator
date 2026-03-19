@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>异星工厂 蓝图编辑器</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{width:100%;height:100%;overflow:hidden;background:#0e1016;font-family:'Segoe UI',system-ui,sans-serif}
+  #app{display:flex;flex-direction:column;width:100vw;height:100vh}
+  #toolbar{
+    display:flex;align-items:center;gap:5px;padding:6px 10px;
+    background:#1a1d26;border-bottom:1px solid #2a2e3e;
+    flex-wrap:wrap;flex-shrink:0;min-height:44px;
+  }
+  .tg{display:flex;align-items:center;gap:3px;padding-right:8px;border-right:1px solid #2a2e3e}
+  .tg:last-child{border-right:none}
+  .tl{font-size:10px;color:#666;white-space:nowrap}
+  .tile-btn{
+    width:30px;height:34px;border-radius:5px;border:1.5px solid transparent;
+    cursor:pointer;display:flex;flex-direction:column;align-items:center;
+    justify-content:center;font-size:10px;font-weight:600;flex-shrink:0;position:relative;gap:1px;
+    transition:border-color .1s;
+  }
+  .tile-btn:hover{filter:brightness(1.2)}
+  .tile-btn.active{border-color:#fff!important;box-shadow:0 0 0 2px #0e1016 inset}
+  .tile-btn .hk{font-size:8px;line-height:1;opacity:.65}
+  .tile-btn .sb{position:absolute;top:1px;right:2px;font-size:7px;background:rgba(0,0,0,.65);color:#fff;border-radius:2px;padding:0 2px;line-height:1.5}
+  .tile-btn .rb{position:absolute;bottom:1px;left:2px;font-size:7px;color:rgba(255,255,255,.4);line-height:1}
+  #canvas-wrap{flex:1;overflow:hidden;position:relative;cursor:crosshair;outline:none}
+  canvas{display:block;position:absolute;top:0;left:0}
+  #statusbar{
+    display:flex;align-items:center;gap:10px;padding:4px 10px;
+    background:#1a1d26;border-top:1px solid #2a2e3e;
+    font-size:11px;color:#666;flex-wrap:wrap;flex-shrink:0;
+  }
+  #statusbar span{white-space:nowrap}
+  .sep{width:1px;height:12px;background:#2a2e3e;flex-shrink:0}
+  #st-mode{color:#aab;font-weight:500}
+  select,button.action{
+    font-size:11px;color:#ccc;background:#252836;
+    border:1px solid #333;border-radius:4px;padding:3px 7px;cursor:pointer;
+  }
+  select:hover,button.action:hover{background:#2e3245;border-color:#444}
+  button.action:active{transform:scale(.97)}
+  #dir-ind{
+    width:26px;height:26px;background:#1a2a1a;border:1px solid #3a6a3a;
+    border-radius:4px;display:flex;align-items:center;justify-content:center;
+    font-size:16px;color:#5c5;
+  }
+  /* 弹窗 */
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;align-items:center;justify-content:center}
+  .modal-bg.show{display:flex}
+  .modal{background:#1e2130;border:1px solid #333;border-radius:8px;padding:20px;max-width:460px;width:92%}
+  .modal h3{font-size:13px;font-weight:600;color:#dde;margin-bottom:12px}
+  .modal input{
+    width:100%;font-size:12px;padding:8px;
+    background:#252836;border:1px solid #333;border-radius:4px;
+    color:#dde;margin-bottom:8px;outline:none;
+  }
+  .modal input:focus{border-color:#5577aa}
+  .preset-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+  .preset-btn{font-size:11px;color:#aab;background:#252836;border:1px solid #333;border-radius:4px;padding:3px 8px;cursor:pointer}
+  .preset-btn:hover{background:#2e3245;color:#dde}
+  .modal-btns{display:flex;justify-content:flex-end;gap:8px}
+  .btn-primary{background:#2a4a7a;color:#8bc;border:1px solid #3a6aaa;border-radius:4px;padding:5px 14px;cursor:pointer;font-size:12px}
+  .btn-primary:hover{background:#335a8a}
+  textarea{width:100%;height:220px;font-family:monospace;font-size:11px;background:#252836;border:1px solid #333;border-radius:4px;padding:8px;color:#aab;resize:none;outline:none}
+  /* 无限画布提示 */
+  #grid-size-display{font-size:10px;color:#556;padding:2px 6px;background:#151820;border:1px solid #252836;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="app">
+
+<div id="toolbar">
+  <div class="tg"><span class="tl">建筑</span><div id="tiles-row" style="display:flex;gap:2px"></div></div>
+  <div class="tg">
+    <span class="tl">方向</span>
+    <div id="dir-ind">→</div>
+    <span style="font-size:10px;color:#556;line-height:1.3">R<br>旋转</span>
+  </div>
+  <div class="tg">
+    <span class="tl">操作</span>
+    <button class="action" id="btn-undo">⌘Z 撤回</button>
+    <button class="action" id="btn-clear">清空</button>
+    <button class="action" id="btn-export">导出</button>
+  </div>
+  <div class="tg">
+    <span class="tl">格子大小</span>
+    <select id="sel-size">
+      <option value="14">14px</option>
+      <option value="18">18px</option>
+      <option value="24" selected>24px</option>
+      <option value="30">30px</option>
+      <option value="36">36px</option>
+    </select>
+  </div>
+  <div class="tg">
+    <span class="tl">画布</span>
+    <div id="grid-size-display">∞ 无限</div>
+    <button class="action" id="btn-expand">扩展 +20行列</button>
+    <button class="action" id="btn-goto0">回原点</button>
+  </div>
+  <div class="tg">
+    <span class="tl">蓝图库</span>
+    <button class="action" id="btn-save-bp" style="color:#8dc;border-color:#3a6a8a">💾 保存</button>
+    <button class="action" id="btn-load-bp" style="color:#8dc;border-color:#3a6a8a">📂 加载</button>
+  </div>
+  <div class="tg">
+    <span id="st-mode"></span>
+  </div>
+</div>
+
+<div id="canvas-wrap" tabindex="0">
+  <canvas id="bp-canvas"></canvas>
+</div>
+
+<div id="statusbar">
+  <span id="st-pos">X:— Y:—</span><div class="sep"></div>
+  <span id="st-cam">视角(0,0)</span><div class="sep"></div>
+  <span id="st-asm">组装机 0 台</span><div class="sep"></div>
+  <span id="st-undo">撤回:0</span><div class="sep"></div>
+  <span style="color:#445">1–0切换建筑 · WASD/方向键移动 · 滚轮缩放 · R旋转 · 双击组装机设配方 · <b style="color:#556">Ctrl+C</b>框选复制 · <b style="color:#556">Alt+D</b>框选删除 · Ctrl+V粘贴 · Ctrl+Z撤回 · Esc取消</span>
+</div>
+
+</div>
+
+<!-- 配方弹窗 -->
+<div class="modal-bg" id="recipe-modal">
+  <div class="modal">
+    <h3>设置组装机配方</h3>
+    <input id="recipe-input" placeholder="输入产品名，如：绿电路、铁板、传送带…">
+    <div class="preset-row" id="recipe-presets"></div>
+    <div class="modal-btns">
+      <button class="action" id="recipe-clear-btn">清除配方</button>
+      <button class="action" id="recipe-cancel">取消</button>
+      <button class="btn-primary" id="recipe-confirm">确认</button>
+    </div>
+  </div>
+</div>
+
+<!-- 导出弹窗 -->
+<div class="modal-bg" id="export-modal">
+  <div class="modal" style="max-width:560px">
+    <h3>蓝图文字导出</h3>
+    <textarea id="export-text" readonly></textarea>
+    <div class="modal-btns" style="margin-top:10px">
+      <button class="action" id="btn-copy-txt">复制</button>
+      <button class="action" id="close-export">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════ 常量 ═══════════════
+const DIR={R:0,D:1,L:2,U:3};
+const DIR_ARROW=['→','↓','←','↑'];
+const DIR_ANGLE=[0,90,180,270];
+
+const TILES=[
+  {id:0,name:'空地',   color:'#1a1f2e',border:'#2a3042',size:1,label:'',   hasDir:false},
+  {id:1,name:'传送带', color:'#7a5006',border:'#e0a020',size:1,label:'带',  hasDir:true},
+  {id:2,name:'组装机', color:'#1e4a8a',border:'#4080d8',size:3,label:'组装',hasDir:false,hasRecipe:true},
+  {id:3,name:'采矿机', color:'#5a2e10',border:'#904020',size:1,label:'矿',  hasDir:true},
+  {id:4,name:'熔炉',   color:'#7a1414',border:'#c02020',size:1,label:'炉',  hasDir:false},
+  {id:5,name:'化工厂', color:'#124a2e',border:'#18884e',size:1,label:'化',  hasDir:false},
+  {id:6,name:'电线杆', color:'#3a2e10',border:'#806820',size:1,label:'杆',  hasDir:false},
+  {id:7,name:'管道',   color:'#2e2e2e',border:'#606060',size:1,label:'管',  hasDir:false},
+  {id:8,name:'插入臂', color:'#4a2060',border:'#8848b0',size:1,label:'臂',  hasDir:true},
+  {id:9,name:'墙壁',   color:'#555544',border:'#9a9880',size:1,label:'墙',  hasDir:false},
+  {id:10,name:'分流器',color:'#6a4a08',border:'#d09020',size:1,label:'分',  hasDir:true},
+];
+const KEY_TO_TILE={'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'0':10};
+const TILE_HOTKEY=['','1','2','3','4','5','6','7','8','9','0'];
+const RECIPE_PRESETS=['绿电路','红电路','蓝电路','铁板','铜板','钢板','传送带','插入臂','铁齿轮','铜线','自动化科研','物流科研','化学科研','生产科研','实用科研','塑料','电池','发动机','机架','火箭燃料'];
+
+// ═══════════════ 状态 ═══════════════
+let cellSize=24;
+// 无限画布：用 Map 存稀疏格子，key = "r,c"
+// 用 cols/rows 表示当前逻辑尺寸（可扩展）
+let cols=60, rows=40;
+let gridMap=new Map(); // "r,c" -> {tid,dir,recipe,origin}
+
+let currentTile=1, currentDir=DIR.R;
+let painting=false, erasing=false, hoverCell=null;
+let camX=0, camY=0;
+const CAM_SPEED=8;
+const keys={};
+let camRaf=null;
+const UNDO_MAX=100;
+let undoStack=[];
+let mode='place';
+let selStart=null,selEnd=null,selDragging=false,selection=null;
+let selDragMode='copy'; // 'copy' | 'delete'
+let clipboard=null, pastePreview=false;
+let recipeTargetOrigin=null;
+let lastClickTime=0,lastClickCell=null;
+
+// ═══════════════ Grid 辅助 ═══════════════
+function gk(r,c){return r+','+c}
+function gget(r,c){return gridMap.get(gk(r,c))||{tid:0,dir:DIR.R,recipe:'',origin:null}}
+function gset(r,c,v){gridMap.set(gk(r,c),v)}
+function gclear(r,c){gridMap.delete(gk(r,c))}
+function inBounds(r,c){return r>=0&&c>=0&&r<rows&&c<cols}
+
+function snapshotGrid(){
+  const m=new Map();
+  gridMap.forEach((v,k)=>m.set(k,{...v,origin:v.origin?{...v.origin}:null}));
+  return {map:m,cols,rows};
+}
+function pushUndo(){
+  undoStack.push(snapshotGrid());
+  if(undoStack.length>UNDO_MAX)undoStack.shift();
+  document.getElementById('st-undo').textContent=`撤回:${undoStack.length}`;
+}
+function doUndo(){
+  if(!undoStack.length)return;
+  const s=undoStack.pop();
+  gridMap=s.map; cols=s.cols; rows=s.rows;
+  document.getElementById('st-undo').textContent=`撤回:${undoStack.length}`;
+  selection=null;pastePreview=false;
+  updateGridDisplay();render();updateStats();
+}
+function updateGridDisplay(){
+  document.getElementById('grid-size-display').textContent=`${cols}×${rows}`;
+}
+
+// ═══════════════ Canvas / 视口 ═══════════════
+const wrap=document.getElementById('canvas-wrap');
+const canvas=document.getElementById('bp-canvas');
+const ctx=canvas.getContext('2d');
+let vpW=0,vpH=0;
+
+function resizeViewport(){
+  vpW=wrap.clientWidth; vpH=wrap.clientHeight;
+  canvas.width=vpW; canvas.height=vpH;
+  canvas.style.width=vpW+'px'; canvas.style.height=vpH+'px';
+  clampCam(); render();
+}
+function clampCam(){
+  const totalW=cols*cellSize, totalH=rows*cellSize;
+  const pad=cellSize*3;
+  camX=Math.max(-pad,Math.min(Math.max(0,totalW-vpW)+pad,camX));
+  camY=Math.max(-pad,Math.min(Math.max(0,totalH-vpH)+pad,camY));
+}
+function mouseToCell(e){
+  const rect=canvas.getBoundingClientRect();
+  const x=e.clientX-rect.left, y=e.clientY-rect.top;
+  return{c:Math.floor((x+camX)/cellSize),r:Math.floor((y+camY)/cellSize)};
+}
+
+// ═══════════════ 绘制辅助 ═══════════════
+function drawBeltArrow(x,y,sz,dir,color){
+  ctx.save();
+  ctx.translate(x+sz/2,y+sz/2);ctx.rotate(DIR_ANGLE[dir]*Math.PI/180);
+  const hw=sz*.28,hh=sz*.22,sh=sz*.11;
+  ctx.fillStyle=color;ctx.beginPath();
+  ctx.moveTo(hw,0);ctx.lineTo(0,-hh);ctx.lineTo(0,-sh);
+  ctx.lineTo(-hw*.7,-sh);ctx.lineTo(-hw*.7,sh);ctx.lineTo(0,sh);ctx.lineTo(0,hh);
+  ctx.closePath();ctx.fill();ctx.restore();
+}
+function drawSmallArrow(x,y,sz,dir,color){
+  ctx.save();
+  ctx.translate(x+sz*.82,y+sz*.5);ctx.rotate(DIR_ANGLE[dir]*Math.PI/180);
+  const aw=sz*.18,ah=sz*.13;
+  ctx.fillStyle=color;ctx.globalAlpha=.8;
+  ctx.beginPath();ctx.moveTo(aw,0);ctx.lineTo(-aw*.5,-ah);ctx.lineTo(-aw*.5,ah);ctx.closePath();ctx.fill();
+  ctx.restore();ctx.globalAlpha=1;
+}
+function drawSplitter(cell,r,c){
+  const dir=cell.dir,x=c*cellSize,y=r*cellSize,S=cellSize;
+  const horiz=(dir===DIR.R||dir===DIR.L);
+  const w=horiz?S*2:S,h=horiz?S:S*2;
+  const t=TILES[10];
+  ctx.fillStyle=t.color;ctx.fillRect(x,y,w,h);
+  ctx.strokeStyle=t.border;ctx.lineWidth=1.5;ctx.strokeRect(x+.75,y+.75,w-1.5,h-1.5);
+  ctx.strokeStyle=t.border+'44';ctx.lineWidth=.5;
+  if(horiz){ctx.beginPath();ctx.moveTo(x+S,y);ctx.lineTo(x+S,y+S);ctx.stroke();}
+  else{ctx.beginPath();ctx.moveTo(x,y+S);ctx.lineTo(x+S,y+S);ctx.stroke();}
+  // 箭头
+  ctx.save();ctx.translate(x+w/2,y+h/2);ctx.rotate(DIR_ANGLE[dir]*Math.PI/180);
+  const M=Math.min(w,h),aw=M*.28,ah=M*.18,ash=M*.09;
+  ctx.fillStyle=t.border+'cc';ctx.beginPath();
+  ctx.moveTo(aw,0);ctx.lineTo(0,-ah);ctx.lineTo(0,-ash);ctx.lineTo(-aw*.7,-ash);ctx.lineTo(-aw*.7,ash);ctx.lineTo(0,ash);ctx.lineTo(0,ah);
+  ctx.closePath();ctx.fill();ctx.restore();
+}
+
+// ═══════════════ 主渲染 ═══════════════
+function render(){
+  if(!vpW||!vpH)return;
+  ctx.clearRect(0,0,vpW,vpH);
+  ctx.fillStyle='#0e1016';ctx.fillRect(0,0,vpW,vpH);
+  ctx.save();ctx.translate(-camX,-camY);
+
+  // 可见区域
+  const c0=Math.max(0,Math.floor(camX/cellSize)-1);
+  const r0=Math.max(0,Math.floor(camY/cellSize)-1);
+  const c1=Math.min(cols,Math.ceil((camX+vpW)/cellSize)+1);
+  const r1=Math.min(rows,Math.ceil((camY+vpH)/cellSize)+1);
+
+  // 画布底色
+  ctx.fillStyle='#1a1f2e';
+  ctx.fillRect(0,0,cols*cellSize,rows*cellSize);
+
+  // 画布边框
+  ctx.strokeStyle='#3a4060';ctx.lineWidth=2;
+  ctx.strokeRect(1,1,cols*cellSize-2,rows*cellSize-2);
+
+  // 细网格
+  ctx.strokeStyle='#252b3a';ctx.lineWidth=.5;
+  for(let r=r0;r<=r1;r++){ctx.beginPath();ctx.moveTo(c0*cellSize,r*cellSize);ctx.lineTo(c1*cellSize,r*cellSize);ctx.stroke();}
+  for(let c=c0;c<=c1;c++){ctx.beginPath();ctx.moveTo(c*cellSize,r0*cellSize);ctx.lineTo(c*cellSize,r1*cellSize);ctx.stroke();}
+  // 5格线
+  ctx.strokeStyle='#2e3650';ctx.lineWidth=.8;
+  for(let r=Math.floor(r0/5)*5;r<=r1;r+=5){ctx.beginPath();ctx.moveTo(c0*cellSize,r*cellSize);ctx.lineTo(c1*cellSize,r*cellSize);ctx.stroke();}
+  for(let c=Math.floor(c0/5)*5;c<=c1;c+=5){ctx.beginPath();ctx.moveTo(c*cellSize,r0*cellSize);ctx.lineTo(c*cellSize,r1*cellSize);ctx.stroke();}
+
+  // ── 第1遍：size=1 普通建筑
+  for(let r=r0;r<r1;r++) for(let c=c0;c<c1;c++){
+    const cell=gget(r,c);
+    if(!cell.tid||cell.tid===10)continue;
+    const tile=TILES[cell.tid];
+    if(tile.size>1)continue; // 大建筑第3遍画
+    const x=c*cellSize,y=r*cellSize;
+    ctx.fillStyle=tile.color;ctx.fillRect(x,y,cellSize,cellSize);
+    ctx.strokeStyle=tile.border;ctx.lineWidth=.5;ctx.strokeRect(x+.25,y+.25,cellSize-.5,cellSize-.5);
+    if(cell.tid===1){
+      drawBeltArrow(x,y,cellSize,cell.dir,tile.border);
+    } else if(tile.hasDir){
+      if(cellSize>=18&&tile.label){
+        ctx.fillStyle=tile.border;ctx.font=`bold ${Math.max(8,cellSize*.34)}px sans-serif`;
+        ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText(tile.label,x+cellSize/2,y+cellSize/2);
+      }
+      if(cellSize>=14)drawSmallArrow(x,y,cellSize,cell.dir,tile.border);
+    } else {
+      if(cellSize>=18&&tile.label){
+        ctx.fillStyle=tile.border;ctx.font=`bold ${Math.max(8,cellSize*.34)}px sans-serif`;
+        ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.fillText(tile.label,x+cellSize/2,y+cellSize/2);
+      }
+    }
+  }
+
+  // ── 第2遍：分流器（只画 origin 格）
+  const drawnSp=new Set();
+  for(let r=r0;r<r1;r++) for(let c=c0;c<c1;c++){
+    const cell=gget(r,c);
+    if(cell.tid!==10||!cell.origin)continue;
+    const key=cell.origin.r+'_'+cell.origin.c;
+    if(drawnSp.has(key))continue;drawnSp.add(key);
+    drawSplitter(cell,cell.origin.r,cell.origin.c);
+  }
+
+  // ── 第3遍：大建筑（size>1，只画 origin 格）
+  const drawnBig=new Set();
+  for(let r=r0;r<r1;r++) for(let c=c0;c<c1;c++){
+    const cell=gget(r,c);
+    if(!cell.tid||!cell.origin)continue;
+    const tile=TILES[cell.tid];
+    if(tile.size<=1)continue; // ← 只处理 size>1
+    const key=cell.origin.r+'_'+cell.origin.c;
+    if(drawnBig.has(key))continue;drawnBig.add(key);
+    const s=tile.size,ox=cell.origin.c*cellSize,oy=cell.origin.r*cellSize,W=s*cellSize;
+    ctx.fillStyle=tile.color;ctx.fillRect(ox,oy,W,W);
+    ctx.strokeStyle=tile.border;ctx.lineWidth=1.5;ctx.strokeRect(ox+.75,oy+.75,W-1.5,W-1.5);
+    ctx.strokeStyle=tile.border+'44';ctx.lineWidth=.5;
+    for(let i=1;i<s;i++){
+      ctx.beginPath();ctx.moveTo(ox+i*cellSize,oy);ctx.lineTo(ox+i*cellSize,oy+W);ctx.stroke();
+      ctx.beginPath();ctx.moveTo(ox,oy+i*cellSize);ctx.lineTo(ox+W,oy+i*cellSize);ctx.stroke();
+    }
+    if(cellSize>=16){
+      const recipe=cell.recipe||'';
+      ctx.textAlign='center';ctx.textBaseline='middle';
+      if(recipe){
+        ctx.fillStyle=tile.border;
+        ctx.font=`bold ${Math.max(10,cellSize*.46)}px sans-serif`;
+        ctx.fillText(recipe,ox+W/2,oy+W/2);
+      } else {
+        ctx.fillStyle=tile.border;
+        ctx.font=`bold ${Math.max(10,cellSize*.4)}px sans-serif`;
+        ctx.fillText(tile.label,ox+W/2,oy+W/2);
+        ctx.font=`${Math.max(7,cellSize*.22)}px sans-serif`;
+        ctx.fillStyle=tile.border+'44';
+        ctx.textAlign='right';ctx.textBaseline='bottom';
+        ctx.fillText('? 配方',ox+W-4,oy+W-3);
+      }
+      ctx.font=`${Math.max(7,cellSize*.2)}px sans-serif`;
+      ctx.fillStyle=tile.border+'33';
+      ctx.textAlign='left';ctx.textBaseline='bottom';
+      ctx.fillText('3×3',ox+4,oy+W-3);
+    }
+    // hover 提示
+    if(hoverCell&&hoverCell.r>=cell.origin.r&&hoverCell.r<cell.origin.r+s&&hoverCell.c>=cell.origin.c&&hoverCell.c<cell.origin.c+s){
+      ctx.fillStyle='rgba(255,255,255,.07)';ctx.fillRect(ox,oy,W,W);
+      ctx.fillStyle='rgba(255,255,255,.45)';
+      ctx.font=`${Math.max(8,cellSize*.21)}px sans-serif`;
+      ctx.textAlign='center';ctx.textBaseline='bottom';
+      ctx.fillText('双击设配方',ox+W/2,oy+W-4);
+    }
+  }
+
+  // ── 放置预览
+  if(mode==='place'&&hoverCell&&currentTile>0&&!pastePreview){
+    const tile=TILES[currentTile];const s=tile.size;
+    if(currentTile===10){
+      const horiz=(currentDir===DIR.R||currentDir===DIR.L);
+      const pw=horiz?cellSize*2:cellSize,ph=horiz?cellSize:cellSize*2;
+      const ok=canPlaceSplitter(hoverCell.r,hoverCell.c,currentDir);
+      ctx.globalAlpha=.35;ctx.fillStyle=ok?TILES[10].color:'#992222';
+      ctx.fillRect(hoverCell.c*cellSize,hoverCell.r*cellSize,pw,ph);
+      ctx.globalAlpha=1;ctx.strokeStyle=ok?TILES[10].border:'#ee3333';ctx.lineWidth=2;
+      ctx.strokeRect(hoverCell.c*cellSize+1,hoverCell.r*cellSize+1,pw-2,ph-2);
+    } else if(s===1){
+      const{r,c}=hoverCell;
+      if(inBounds(r,c)){
+        ctx.globalAlpha=.38;ctx.fillStyle=tile.color;ctx.fillRect(c*cellSize,r*cellSize,cellSize,cellSize);
+        ctx.globalAlpha=1;ctx.strokeStyle=tile.border;ctx.lineWidth=2;
+        ctx.strokeRect(c*cellSize+1,r*cellSize+1,cellSize-2,cellSize-2);
+        if(tile.hasDir&&currentTile===1)drawBeltArrow(c*cellSize,r*cellSize,cellSize,currentDir,tile.border);
+        else if(tile.hasDir)drawSmallArrow(c*cellSize,r*cellSize,cellSize,currentDir,tile.border);
+      }
+    } else {
+      const{c,r}=snapOrigin(hoverCell.c,hoverCell.r,s);
+      const ok=canPlace(r,c,s);
+      ctx.globalAlpha=.35;ctx.fillStyle=ok?tile.color:'#992222';
+      ctx.fillRect(c*cellSize,r*cellSize,s*cellSize,s*cellSize);
+      ctx.globalAlpha=1;ctx.strokeStyle=ok?tile.border:'#ee3333';ctx.lineWidth=2;
+      ctx.strokeRect(c*cellSize+1,r*cellSize+1,s*cellSize-2,s*cellSize-2);
+    }
+  }
+
+  // 框选拖动
+  if(mode==='select'&&selDragging&&selStart&&selEnd){
+    const{r0:sr0,c0:sc0,r1:sr1,c1:sc1}=normSel(selStart,selEnd);
+    const selColor=selDragMode==='delete'?'#ff6040':'#60c8ff';
+    const selFill=selDragMode==='delete'?'rgba(255,80,40,.09)':'rgba(60,160,255,.09)';
+    ctx.strokeStyle=selColor;ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.strokeRect(sc0*cellSize,sr0*cellSize,(sc1-sc0+1)*cellSize,(sr1-sr0+1)*cellSize);
+    ctx.setLineDash([]);ctx.fillStyle=selFill;
+    ctx.fillRect(sc0*cellSize,sr0*cellSize,(sc1-sc0+1)*cellSize,(sr1-sr0+1)*cellSize);
+  }
+  // 已确认选区
+  if(selection&&!selDragging){
+    const{r0:sr0,c0:sc0,r1:sr1,c1:sc1}=selection;
+    const selColor=selDragMode==='delete'?'#ff6040':'#60c8ff';
+    ctx.strokeStyle=selColor;ctx.lineWidth=1.5;ctx.setLineDash([5,3]);
+    ctx.strokeRect(sc0*cellSize-.5,sr0*cellSize-.5,(sc1-sc0+1)*cellSize+1,(sr1-sr0+1)*cellSize+1);
+    ctx.setLineDash([]);ctx.fillStyle='rgba(60,160,255,.06)';
+    ctx.fillRect(sc0*cellSize,sr0*cellSize,(sc1-sc0+1)*cellSize,(sr1-sr0+1)*cellSize);
+  }
+  // 粘贴预览
+  if(pastePreview&&clipboard&&hoverCell)drawPastePreview(hoverCell.c,hoverCell.r);
+
+  ctx.restore();
+  drawRuler(c0,r0,c1,r1);
+}
+
+function drawRuler(c0,r0,c1,r1){
+  ctx.save();ctx.font='9px sans-serif';ctx.fillStyle='rgba(150,160,190,.4)';
+  ctx.textAlign='center';ctx.textBaseline='top';
+  for(let c=Math.ceil(c0/5)*5;c<c1;c+=5){const sx=c*cellSize-camX;if(sx>32&&sx<vpW-8)ctx.fillText(c+1,sx,2);}
+  ctx.textAlign='right';ctx.textBaseline='middle';
+  for(let r=Math.ceil(r0/5)*5;r<r1;r+=5){const sy=r*cellSize-camY;if(sy>10&&sy<vpH-10)ctx.fillText(r+1,30,sy);}
+  ctx.restore();
+}
+
+function drawPastePreview(anchorC,anchorR){
+  clipboard.forEach(({dr,dc,tid})=>{
+    if(!tid)return;const tile=TILES[tid];const s=tile.size;
+    const pr=anchorR+dr,pc=anchorC+dc;
+    ctx.globalAlpha=.4;ctx.fillStyle=tile.color;
+    ctx.fillRect(pc*cellSize,pr*cellSize,s*cellSize,s*cellSize);
+    ctx.globalAlpha=1;
+    if(s>1){ctx.strokeStyle=tile.border;ctx.lineWidth=1.5;ctx.setLineDash([3,2]);ctx.strokeRect(pc*cellSize+.5,pr*cellSize+.5,s*cellSize-1,s*cellSize-1);ctx.setLineDash([]);}
+  });
+  ctx.globalAlpha=1;
+  if(clipboard.length){
+    let mr=1e9,mc2=1e9,xr=-1,xc=-1;
+    clipboard.forEach(({dr,dc,tid})=>{const s=TILES[tid].size;mr=Math.min(mr,dr);mc2=Math.min(mc2,dc);xr=Math.max(xr,dr+s-1);xc=Math.max(xc,dc+s-1);});
+    ctx.strokeStyle='#ffdd60';ctx.lineWidth=1.5;ctx.setLineDash([4,3]);
+    ctx.strokeRect((anchorC+mc2)*cellSize,(anchorR+mr)*cellSize,(xc-mc2+1)*cellSize,(xr-mr+1)*cellSize);
+    ctx.setLineDash([]);
+  }
+}
+
+// ═══════════════ 相机 ═══════════════
+function startCam(){if(!camRaf)camRaf=requestAnimationFrame(camLoop);}
+function camLoop(){
+  let mv=false;
+  if(keys['w']||keys['ArrowUp']){camY-=CAM_SPEED;mv=true;}
+  if(keys['s']||keys['ArrowDown']){camY+=CAM_SPEED;mv=true;}
+  if(keys['a']||keys['ArrowLeft']){camX-=CAM_SPEED;mv=true;}
+  if(keys['d']||keys['ArrowRight']){camX+=CAM_SPEED;mv=true;}
+  if(mv){clampCam();document.getElementById('st-cam').textContent=`视角(${Math.round(camX)},${Math.round(camY)})`;render();}
+  const any=keys['w']||keys['s']||keys['a']||keys['d']||keys['ArrowUp']||keys['ArrowDown']||keys['ArrowLeft']||keys['ArrowRight'];
+  if(any)camRaf=requestAnimationFrame(camLoop);else camRaf=null;
+}
+
+// ═══════════════ 辅助 ═══════════════
+function snapOrigin(c,r,s){const h=Math.floor(s/2);return{c:Math.max(0,Math.min(cols-s,c-h)),r:Math.max(0,Math.min(rows-s,r-h))};}
+function canPlace(r,c,s){
+  if(r<0||c<0||r+s>rows||c+s>cols)return false;
+  for(let dr=0;dr<s;dr++)for(let dc=0;dc<s;dc++)if(gget(r+dr,c+dc).tid)return false;
+  return true;
+}
+function canPlaceSplitter(r,c,dir){
+  const horiz=(dir===DIR.R||dir===DIR.L);
+  const r2=horiz?r:r+1,c2=horiz?c+1:c;
+  if(!inBounds(r,c)||!inBounds(r2,c2))return false;
+  return !gget(r,c).tid&&!gget(r2,c2).tid;
+}
+function normSel(a,b){return{r0:Math.min(a.r,b.r),c0:Math.min(a.c,b.c),r1:Math.max(a.r,b.r),c1:Math.max(a.c,b.c)};}
+
+// ═══════════════ 放置 / 擦除 ═══════════════
+function placeTile(mc,mr){
+  if(!inBounds(mr,mc))return;
+  const tile=TILES[currentTile];
+  if(currentTile===10){
+    if(!canPlaceSplitter(mr,mc,currentDir))return;
+    const horiz=(currentDir===DIR.R||currentDir===DIR.L);
+    const r2=horiz?mr:mr+1,c2=horiz?mc+1:mc;
+    gset(mr,mc,{tid:10,origin:{r:mr,c:mc},dir:currentDir,recipe:''});
+    gset(r2,c2,{tid:10,origin:{r:mr,c:mc},dir:currentDir,recipe:''});
+  } else if(tile.size===1){
+    if(gget(mr,mc).tid)return;
+    gset(mr,mc,{tid:currentTile,origin:null,dir:currentDir,recipe:''});
+  } else {
+    const{c,r}=snapOrigin(mc,mr,tile.size);
+    if(!canPlace(r,c,tile.size))return;
+    for(let dr=0;dr<tile.size;dr++)for(let dc=0;dc<tile.size;dc++)
+      gset(r+dr,c+dc,{tid:currentTile,origin:{r,c},dir:currentDir,recipe:''});
+  }
+  render();updateStats();
+}
+function eraseTile(mc,mr){
+  if(!inBounds(mr,mc))return;
+  const cell=gget(mr,mc);if(!cell.tid)return;
+  const tile=TILES[cell.tid];
+  if(cell.tid===10){
+    const or=cell.origin?cell.origin.r:mr,oc=cell.origin?cell.origin.c:mc;
+    const horiz=(cell.dir===DIR.R||cell.dir===DIR.L);
+    const r2=horiz?or:or+1,c2=horiz?oc+1:oc;
+    gclear(or,oc);gclear(r2,c2);
+  } else if(tile.size>1&&cell.origin){
+    const s=tile.size,or=cell.origin.r,oc=cell.origin.c;
+    for(let dr=0;dr<s;dr++)for(let dc=0;dc<s;dc++)gclear(or+dr,oc+dc);
+  } else {
+    gclear(mr,mc);
+  }
+  render();updateStats();
+}
+
+// ═══════════════ 旋转 ═══════════════
+function rotate(){
+  currentDir=(currentDir+1)%4;
+  document.getElementById('dir-ind').textContent=DIR_ARROW[currentDir];
+  updateModeLabel();render();
+}
+
+// ═══════════════ 配方 ═══════════════
+function openRecipeModal(origin){
+  recipeTargetOrigin=origin;
+  const cell=gget(origin.r,origin.c);
+  document.getElementById('recipe-input').value=cell.recipe||'';
+  const pDiv=document.getElementById('recipe-presets');pDiv.innerHTML='';
+  RECIPE_PRESETS.forEach(p=>{
+    const btn=document.createElement('button');btn.className='preset-btn';btn.textContent=p;
+    btn.onclick=()=>document.getElementById('recipe-input').value=p;
+    pDiv.appendChild(btn);
+  });
+  document.getElementById('recipe-modal').classList.add('show');
+  setTimeout(()=>document.getElementById('recipe-input').focus(),50);
+}
+function closeRecipeModal(){document.getElementById('recipe-modal').classList.remove('show');recipeTargetOrigin=null;}
+function applyRecipe(val){
+  if(!recipeTargetOrigin)return;
+  const origin=recipeTargetOrigin;
+  const cell=gget(origin.r,origin.c);const tile=TILES[cell.tid];const s=tile.size;
+  for(let dr=0;dr<s;dr++)for(let dc=0;dc<s;dc++){
+    const tr=origin.r+dr,tc=origin.c+dc;
+    if(inBounds(tr,tc)){const c2=gget(tr,tc);c2.recipe=val;gset(tr,tc,c2);}
+  }
+  closeRecipeModal();render();
+}
+document.getElementById('recipe-confirm').onclick=()=>applyRecipe(document.getElementById('recipe-input').value.trim());
+document.getElementById('recipe-clear-btn').onclick=()=>applyRecipe('');
+document.getElementById('recipe-cancel').onclick=closeRecipeModal;
+document.getElementById('recipe-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter')applyRecipe(document.getElementById('recipe-input').value.trim());
+  if(e.key==='Escape')closeRecipeModal();
+  e.stopPropagation();
+});
+
+// ═══════════════ 复制粘贴 ═══════════════
+function copySelection(){
+  if(!selection)return;
+  const{r0,c0,r1,c1}=selection;clipboard=[];const counted=new Set();
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){
+    const cell=gget(r,c);if(!cell.tid)continue;const tile=TILES[cell.tid];
+    if(tile.size>1&&cell.origin){
+      const key=cell.origin.r+'_'+cell.origin.c;if(counted.has(key))continue;counted.add(key);
+      const s=tile.size;
+      if(cell.origin.r>=r0&&cell.origin.c>=c0&&cell.origin.r+s-1<=r1&&cell.origin.c+s-1<=c1)
+        clipboard.push({dr:cell.origin.r-r0,dc:cell.origin.c-c0,tid:cell.tid,dir:cell.dir,recipe:cell.recipe});
+    } else if(cell.tid===10&&cell.origin){
+      const key2=cell.origin.r+'_'+cell.origin.c;if(counted.has(key2))continue;counted.add(key2);
+      clipboard.push({dr:cell.origin.r-r0,dc:cell.origin.c-c0,tid:10,dir:cell.dir,recipe:''});
+    } else if(tile.size===1){
+      clipboard.push({dr:r-r0,dc:c-c0,tid:cell.tid,dir:cell.dir,recipe:cell.recipe});
+    }
+  }
+  pastePreview=true;updateModeLabel();render();
+}
+function deleteSelection(){
+  if(!selection)return;
+  pushUndo();
+  const{r0,c0,r1,c1}=selection;const cleared=new Set();
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){
+    const cell=gget(r,c);if(!cell.tid)continue;const tile=TILES[cell.tid];
+    if((tile.size>1||cell.tid===10)&&cell.origin){
+      const key=cell.origin.r+'_'+cell.origin.c;if(cleared.has(key))continue;cleared.add(key);
+      const s=tile.size;
+      for(let dr=0;dr<s;dr++)for(let dc=0;dc<(cell.tid===10?2:s);dc++)gclear(cell.origin.r+dr,cell.origin.c+dc);
+    } else if(tile.size===1){
+      gclear(r,c);
+    }
+  }
+  render();updateStats();
+}
+function pasteAt(anchorC,anchorR){
+  if(!clipboard||!clipboard.length)return;pushUndo();
+  clipboard.forEach(({dr,dc,tid,dir,recipe})=>{
+    const tile=TILES[tid];const s=tile.size;const pr=anchorR+dr,pc=anchorC+dc;
+    if(tid===10){
+      if(canPlaceSplitter(pr,pc,dir)){const horiz=(dir===DIR.R||dir===DIR.L);const r2=horiz?pr:pr+1,c2=horiz?pc+1:pc;gset(pr,pc,{tid:10,origin:{r:pr,c:pc},dir,recipe:''});gset(r2,c2,{tid:10,origin:{r:pr,c:pc},dir,recipe:''});}
+    } else if(s===1){if(inBounds(pr,pc)&&!gget(pr,pc).tid)gset(pr,pc,{tid,origin:null,dir,recipe});}
+    else{if(canPlace(pr,pc,s))for(let ddr=0;ddr<s;ddr++)for(let ddc=0;ddc<s;ddc++)gset(pr+ddr,pc+ddc,{tid,origin:{r:pr,c:pc},dir,recipe});}
+  });
+  render();updateStats();
+}
+
+// ═══════════════ 模式 ═══════════════
+function setMode(m,dragMode){
+  mode=m;
+  if(dragMode)selDragMode=dragMode;
+  if(m==='select'){
+    wrap.style.cursor='crosshair';
+  } else {
+    wrap.style.cursor='crosshair';
+  }
+  updateModeLabel();
+}
+function updateModeLabel(){
+  const el=document.getElementById('st-mode');
+  if(pastePreview){el.textContent='📋 粘贴模式 — 左键确认，右键/Esc取消';return;}
+  if(mode==='select'&&selDragMode==='copy'){el.textContent='📦 复制框选 — 拖左键选区，松开自动复制，Esc取消';return;}
+  if(mode==='select'&&selDragMode==='delete'){el.textContent='🗑️ 删除框选 — 拖左键选区，松开清除建筑，Esc取消';return;}
+  const tile=TILES[currentTile],hk=TILE_HOTKEY[currentTile];
+  const dirStr=tile.hasDir?' '+DIR_ARROW[currentDir]:'';
+  el.textContent=`✏️ [${hk}] ${tile.name}${dirStr}`;
+}
+function selectTile(idx){
+  if(idx<1||idx>=TILES.length)return;currentTile=idx;pastePreview=false;
+  if(mode==='select'){selection=null;selDragging=false;setMode('place');}
+  document.querySelectorAll('.tile-btn').forEach((b,j)=>b.classList.toggle('active',j+1===idx));
+  updateModeLabel();render();
+}
+
+// ═══════════════ 鼠标 ═══════════════
+canvas.addEventListener('mousedown',e=>{
+  e.preventDefault();wrap.focus();const cell=mouseToCell(e);
+  if(e.button===2){
+    if(pastePreview){pastePreview=false;updateModeLabel();render();return;}
+    if(mode==='select'){selection=null;selDragging=false;setMode('place');render();return;}
+    pushUndo();erasing=true;painting=false;eraseTile(cell.c,cell.r);return;
+  }
+  const now=Date.now(),same=lastClickCell&&lastClickCell.r===cell.r&&lastClickCell.c===cell.c;
+  if(now-lastClickTime<380&&same&&mode!=='select'){
+    const gc=gget(cell.r,cell.c);
+    if(gc.tid===2&&gc.origin){openRecipeModal(gc.origin);lastClickTime=0;return;}
+  }
+  lastClickTime=now;lastClickCell={...cell};
+  if(pastePreview){pasteAt(cell.c,cell.r);pastePreview=false;updateModeLabel();render();return;}
+  if(mode==='select'){selStart={...cell};selEnd={...cell};selDragging=true;selection=null;render();return;}
+  pushUndo();painting=true;placeTile(cell.c,cell.r);
+});
+canvas.addEventListener('mousemove',e=>{
+  const cell=mouseToCell(e);hoverCell=cell;
+  if(inBounds(cell.r,cell.c))document.getElementById('st-pos').textContent=`X:${cell.c+1} Y:${cell.r+1}`;
+  if(mode==='select'&&selDragging){selEnd={...cell};render();return;}
+  if(painting)placeTile(cell.c,cell.r);
+  else if(erasing)eraseTile(cell.c,cell.r);
+  else render();
+});
+canvas.addEventListener('mouseup',e=>{
+  if(mode==='select'&&selDragging&&selStart&&selEnd){
+    selection=normSel(selStart,selEnd);selDragging=false;
+    if(selDragMode==='copy'){
+      copySelection(); // 自动复制并进入粘贴预览
+      setMode('place');
+    } else if(selDragMode==='delete'){
+      deleteSelection();
+      selection=null;setMode('place');
+    }
+    return;
+  }
+  painting=false;erasing=false;
+});
+canvas.addEventListener('mouseleave',()=>{
+  painting=false;erasing=false;hoverCell=null;
+  if(selDragging&&selStart&&selEnd){selection=normSel(selStart,selEnd);selDragging=false;}
+  render();
+});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+
+// 滚轮缩放
+canvas.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const wx=mx+camX,wy=my+camY;
+  const sizes=[10,14,18,24,30,36,48];
+  let idx=sizes.indexOf(cellSize);
+  if(idx===-1)idx=2;
+  idx=e.deltaY<0?Math.min(sizes.length-1,idx+1):Math.max(0,idx-1);
+  if(sizes[idx]===cellSize)return;
+  const scale=sizes[idx]/cellSize;
+  camX=wx*scale-mx;camY=wy*scale-my;
+  cellSize=sizes[idx];
+  document.getElementById('sel-size').value=cellSize<=36?String(cellSize):'24';
+  clampCam();render();
+},{passive:false});
+
+// ═══════════════ 键盘 ═══════════════
+document.addEventListener('keydown',e=>{
+  const tag=document.activeElement.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT')return;
+  if(document.getElementById('recipe-modal').classList.contains('show'))return;
+
+  if(e.ctrlKey||e.metaKey){
+    if(e.key==='z'){e.preventDefault();doUndo();return;}
+    if(e.key==='c'){e.preventDefault();selection=null;selDragging=false;setMode('select','copy');render();return;}
+    if(e.key==='v'){e.preventDefault();if(clipboard){pastePreview=true;updateModeLabel();render();}return;}
+    return;
+  }
+  if(e.altKey){
+    if(e.key==='d'||e.key==='D'){e.preventDefault();selection=null;selDragging=false;setMode('select','delete');render();return;}
+    return;
+  }
+  if(KEY_TO_TILE[e.key]!==undefined){e.preventDefault();selectTile(KEY_TO_TILE[e.key]);return;}
+  if(e.key==='r'||e.key==='R'){e.preventDefault();rotate();return;}
+  if(e.key==='Escape'){pastePreview=false;selection=null;selDragging=false;if(mode==='select')setMode('place');render();updateModeLabel();return;}
+
+  keys[e.key]=true;
+  if(['w','a','s','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)){
+    e.preventDefault();startCam();
+  }
+});
+document.addEventListener('keyup',e=>{delete keys[e.key];});
+
+// ═══════════════ 统计 ═══════════════
+function updateStats(){
+  const asms=new Set();
+  gridMap.forEach((v,k)=>{if(v.tid===2&&v.origin)asms.add(v.origin.r+'_'+v.origin.c);});
+  document.getElementById('st-asm').textContent=`组装机 ${asms.size} 台`;
+}
+
+// ═══════════════ 工具栏 ═══════════════
+function buildTileButtons(){
+  const row=document.getElementById('tiles-row');row.innerHTML='';
+  TILES.forEach((tile,i)=>{
+    if(i===0)return;const hk=TILE_HOTKEY[i];
+    const btn=document.createElement('div');
+    btn.className='tile-btn'+(i===currentTile?' active':'');
+    btn.style.background=tile.color;btn.style.borderColor=tile.border+'88';
+    btn.title=`[${hk}] ${tile.name}${tile.size>1?` (${tile.size}×${tile.size})`:''}${tile.hasDir?' R旋转':''}`;
+    btn.innerHTML=`<span style="color:${tile.border};font-size:10px">${tile.label||'·'}</span><span class="hk" style="color:${tile.border}88">${hk}</span>`;
+    if(tile.size>1)btn.innerHTML+=`<span class="sb">${tile.size}²</span>`;
+    if(tile.hasDir)btn.innerHTML+=`<span class="rb">R</span>`;
+    btn.addEventListener('click',()=>selectTile(i));
+    row.appendChild(btn);
+  });
+  // 不再有框选按钮，框选通过 Ctrl+C / Alt+D 触发
+  buildTileButtons._done=true;
+}
+
+// ═══════════════ 按钮事件 ═══════════════
+document.getElementById('sel-size').addEventListener('change',e=>{
+  cellSize=+e.target.value;clampCam();resizeViewport();
+});
+document.getElementById('btn-undo').addEventListener('click',doUndo);
+document.getElementById('btn-clear').addEventListener('click',()=>{pushUndo();gridMap.clear();selection=null;pastePreview=false;render();updateStats();});
+document.getElementById('btn-goto0').addEventListener('click',()=>{camX=0;camY=0;render();document.getElementById('st-cam').textContent='视角(0,0)';});
+document.getElementById('btn-expand').addEventListener('click',()=>{cols+=20;rows+=20;updateGridDisplay();clampCam();render();});
+
+document.getElementById('btn-export').addEventListener('click',()=>{
+  let out=`蓝图 ${cols}×${rows}\n`;
+  out+=`图例: · →↓←↑传送带 A组装 M矿 F炉 C化 P杆 |管 I臂 W墙 分\n\n`;
+  for(let r=0;r<rows;r++){
+    let row=String(r+1).padStart(3)+' ';
+    let hasContent=false;
+    for(let c=0;c<cols;c++){const cell=gget(r,c);const tid=cell.tid;if(tid)hasContent=true;const sym={0:'·',1:'→↓←↑'[cell.dir],2:'A',3:'M',4:'F',5:'C',6:'P',7:'|',8:'I',9:'W',10:'分'}[tid]||'?';row+=sym;}
+    if(hasContent||r<5)out+=row+'\n';
+  }
+  const counts={};const asms=new Set();const recipes={};
+  gridMap.forEach(v=>{
+    if(!v.tid)return;
+    if(v.tid===2&&v.origin){const k=v.origin.r+'_'+v.origin.c;if(!asms.has(k)){asms.add(k);counts[2]=(counts[2]||0)+1;if(v.recipe)recipes[v.recipe]=(recipes[v.recipe]||0)+1;}}
+    else if(v.tid!==2)counts[v.tid]=(counts[v.tid]||0)+1;
+  });
+  out+='\n用料统计:\n';
+  Object.entries(counts).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>{const t=TILES[+k];out+=`  ${t.name}: ${v}${t.size>1?' 台':' 格'}\n`;});
+  if(Object.keys(recipes).length){out+='\n组装机配方:\n';Object.entries(recipes).sort((a,b)=>b[1]-a[1]).forEach(([k,v])=>out+=`  ${k}: ${v}台\n`);}
+  document.getElementById('export-text').value=out;
+  document.getElementById('export-modal').classList.add('show');
+});
+document.getElementById('close-export').addEventListener('click',()=>document.getElementById('export-modal').classList.remove('show'));
+document.getElementById('btn-copy-txt').addEventListener('click',()=>{
+  document.getElementById('export-text').select();document.execCommand('copy');
+  document.getElementById('btn-copy-txt').textContent='已复制!';
+  setTimeout(()=>document.getElementById('btn-copy-txt').textContent='复制',1500);
+});
+
+// ═══════════════ 初始化 ═══════════════
+function init(){
+  buildTileButtons();
+  updateGridDisplay();
+  updateModeLabel();
+  // 用 requestAnimationFrame 确保 DOM 已布局完成再测量尺寸
+  requestAnimationFrame(()=>{
+    resizeViewport();
+    wrap.focus();
+  });
+}
+
+window.addEventListener('resize',()=>resizeViewport());
+// ResizeObserver 备用（某些情况下 window resize 不触发）
+if(window.ResizeObserver){
+  new ResizeObserver(()=>resizeViewport()).observe(wrap);
+}
+
+init();
+</script>
+
+<!-- 保存蓝图弹窗 -->
+<div class="modal-bg" id="save-bp-modal">
+  <div class="modal" style="max-width:400px">
+    <h3>💾 保存蓝图</h3>
+    <input id="save-bp-name" placeholder="蓝图名称，如：绿电路产线 v1">
+    <div style="font-size:11px;color:#556;margin-bottom:10px">保存在浏览器本地，关闭页面后依然保留</div>
+    <div class="modal-btns">
+      <button class="action" id="save-bp-cancel">取消</button>
+      <button class="btn-primary" id="save-bp-confirm">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 加载蓝图弹窗 -->
+<div class="modal-bg" id="load-bp-modal">
+  <div class="modal" style="max-width:480px">
+    <h3>📂 蓝图库</h3>
+    <div id="bp-list" style="max-height:300px;overflow-y:auto;margin-bottom:10px"></div>
+    <div id="bp-empty" style="color:#556;font-size:12px;text-align:center;padding:20px 0;display:none">暂无保存的蓝图</div>
+    <div class="modal-btns">
+      <button class="action" id="load-bp-close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════ 蓝图保存/加载 (localStorage) ═══════════════
+const BP_STORE_KEY = 'factorio_blueprints';
+function getBpStore(){try{return JSON.parse(localStorage.getItem(BP_STORE_KEY)||'{}')}catch(e){return{}}}
+function setBpStore(obj){localStorage.setItem(BP_STORE_KEY,JSON.stringify(obj))}
+
+function serializeGrid(){
+  const entries=[];
+  gridMap.forEach((v,k)=>entries.push([k,{...v,origin:v.origin?{...v.origin}:null}]));
+  return{entries,cols,rows};
+}
+function deserializeGrid(data){
+  gridMap=new Map();
+  data.entries.forEach(([k,v])=>gridMap.set(k,v));
+  cols=data.cols;rows=data.rows;
+}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+// 保存
+document.getElementById('btn-save-bp').addEventListener('click',()=>{
+  document.getElementById('save-bp-name').value='';
+  document.getElementById('save-bp-modal').classList.add('show');
+  setTimeout(()=>document.getElementById('save-bp-name').focus(),50);
+});
+document.getElementById('save-bp-cancel').addEventListener('click',()=>document.getElementById('save-bp-modal').classList.remove('show'));
+document.getElementById('save-bp-confirm').addEventListener('click',()=>{
+  const name=document.getElementById('save-bp-name').value.trim();
+  if(!name){document.getElementById('save-bp-name').focus();return;}
+  const store=getBpStore();
+  store['bp_'+Date.now()]={name,time:Date.now(),data:serializeGrid()};
+  setBpStore(store);
+  document.getElementById('save-bp-modal').classList.remove('show');
+  const btn=document.getElementById('btn-save-bp');const orig=btn.textContent;
+  btn.textContent='✅ 已保存!';setTimeout(()=>btn.textContent=orig,1500);
+});
+document.getElementById('save-bp-name').addEventListener('keydown',e=>{
+  if(e.key==='Enter')document.getElementById('save-bp-confirm').click();
+  if(e.key==='Escape')document.getElementById('save-bp-modal').classList.remove('show');
+  e.stopPropagation();
+});
+
+// 加载
+document.getElementById('btn-load-bp').addEventListener('click',()=>{renderBpList();document.getElementById('load-bp-modal').classList.add('show');});
+document.getElementById('load-bp-close').addEventListener('click',()=>document.getElementById('load-bp-modal').classList.remove('show'));
+
+function renderBpList(){
+  const store=getBpStore();
+  const list=document.getElementById('bp-list');
+  const empty=document.getElementById('bp-empty');
+  const entries=Object.entries(store).sort((a,b)=>b[1].time-a[1].time);
+  if(!entries.length){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';list.innerHTML='';
+  entries.forEach(([id,bp])=>{
+    const dt=new Date(bp.time);
+    const ts=`${dt.getMonth()+1}/${dt.getDate()} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 8px;border-bottom:1px solid #252836;';
+    row.innerHTML=`
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;color:#dde;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(bp.name)}</div>
+        <div style="font-size:10px;color:#556">${ts} · ${bp.data.cols}×${bp.data.rows}</div>
+      </div>
+      <button class="btn-primary" style="padding:4px 10px;font-size:11px" data-id="${id}" data-act="load">加载</button>
+      <button class="action" style="font-size:11px;color:#c88;border-color:#633" data-id="${id}" data-act="del">删除</button>
+    `;
+    list.appendChild(row);
+  });
+  list.querySelectorAll('[data-act]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=btn.dataset.id,act=btn.dataset.act;
+      if(act==='load'){
+        const s2=getBpStore();if(!s2[id])return;
+        pushUndo();deserializeGrid(s2[id].data);
+        updateGridDisplay();clampCam();render();updateStats();
+        document.getElementById('load-bp-modal').classList.remove('show');
+      }else if(act==='del'){
+        if(!confirm('确定删除「'+getBpStore()[id]?.name+'」？'))return;
+        const s2=getBpStore();delete s2[id];setBpStore(s2);renderBpList();
+      }
+    });
+  });
+}
+</script>
+</body>
+</html>
